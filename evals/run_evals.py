@@ -8,6 +8,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dotenv import load_dotenv
+import litellm
 from litellm import completion
 from pydantic import ValidationError
 from agent.schemas.incident import IncidentTriageReport
@@ -15,8 +16,12 @@ from agent.prompts.v1_triage import SYSTEM_PROMPT, generate_triage_prompt
 
 load_dotenv()
 
-# Select your model (e.g., 'gpt-4o-mini', 'claude-3-5-sonnet-20241022', or 'gemini/gemini-1.5-flash')
+litellm.drop_params = True
+
 MODEL_NAME = os.getenv("LLM_MODEL", "gemini/gemini-3.5-flash-lite")
+if MODEL_NAME.startswith("gemini-") and not MODEL_NAME.startswith("gemini/"):
+    MODEL_NAME = f"gemini/{MODEL_NAME}"
+
 
 def call_triage_agent(alert_name: str, logs: str, max_retries: int = 2) -> IncidentTriageReport:
     """Invokes LLM with retry loop for structured output schema compliance."""
@@ -33,10 +38,18 @@ def call_triage_agent(alert_name: str, logs: str, max_retries: int = 2) -> Incid
             response_format={"type": "json_object"},
             temperature=0.0
         )
-        raw_text = response.choices[0].message.content
+        raw_text = response.choices[0].message.content or ""
+        clean_text = raw_text.strip()
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]
+        elif clean_text.startswith("```"):
+            clean_text = clean_text[3:]
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]
+        clean_text = clean_text.strip()
 
         try:
-            return IncidentTriageReport.model_validate_json(raw_text)
+            return IncidentTriageReport.model_validate_json(clean_text)
         except ValidationError as e:
             if attempt == max_retries:
                 raise RuntimeError(f"Schema validation failed after {max_retries} retries: {e}")
