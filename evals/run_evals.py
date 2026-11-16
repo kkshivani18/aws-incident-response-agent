@@ -18,10 +18,12 @@ load_dotenv()
 
 litellm.drop_params = True
 
-MODEL_NAME = os.getenv("LLM_MODEL", "gemini/gemini-3.5-flash-lite")
-if MODEL_NAME.startswith("gemini-") and not MODEL_NAME.startswith("gemini/"):
-    MODEL_NAME = f"gemini/{MODEL_NAME}"
+if "AWS_REGION_NAME" not in os.environ and "AWS_DEFAULT_REGION" not in os.environ:
+    os.environ["AWS_REGION_NAME"] = "us-east-1"
 
+MODEL_NAME = os.getenv("LLM_MODEL", "bedrock/amazon.nova-pro-v1:0")
+if not MODEL_NAME.startswith("bedrock/") and ("amazon." in MODEL_NAME):
+    MODEL_NAME = f"bedrock/{MODEL_NAME}"
 
 def call_triage_agent(alert_name: str, logs: str, max_retries: int = 2) -> IncidentTriageReport:
     """Invokes LLM with retry loop for structured output schema compliance."""
