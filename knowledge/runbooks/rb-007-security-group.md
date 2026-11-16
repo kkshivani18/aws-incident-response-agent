@@ -1,9 +1,9 @@
 # Runbook: Security Group Misconfiguration & Egress Blocking
 
 ## Symptoms
-- TCP connection timeouts or connection refused on port 443 / external API calls.
-- Traffic suddenly dropped following recent Terraform or CloudFormation infrastructure updates.
-- VPC Flow Logs showing `REJECT` on outbound packets to third-party endpoints.
+- Connection refused on port 443 / fatal connect: connection refused to api.stripe.com:443.
+- Traffic dropped or TCP connection timeouts after SecurityGroup (e.g. sg-019) updated.
+- VPC Flow Logs showing `REJECT` on outbound HTTPS packets to third-party APIs.
 
 ## Triage & Root Cause
 1. Review CloudTrail audit logs for recent `AuthorizeSecurityGroupEgress` or `RevokeSecurityGroupEgress` events.

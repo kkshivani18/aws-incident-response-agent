@@ -8,9 +8,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from agent.tools.retriever import RunbookRetriever
 
-# In Bedrock Titan Embeddings V2, semantic similarity between a short log and a
-# full runbook document averages ~0.50-0.85 for true matches vs <0.30 for irrelevant text.
-CONFIDENCE_THRESHOLD = 0.50
+CONFIDENCE_THRESHOLD = 0.5
 
 def run_retrieval_eval():
     runbooks_dir = PROJECT_ROOT / "knowledge" / "runbooks"
@@ -34,7 +32,6 @@ def run_retrieval_eval():
     noise_rejected = 0
     noise_total = 0
 
-    # Header designed strictly to stay under 86 characters to prevent terminal line-wrapping
     header = f"{'Incident':<9} | {'Expected Runbook':<29} | {'Top Retrieved':<29} | {'Score':<6} | {'Status'}"
     print(header)
     print("-" * len(header))
@@ -44,27 +41,31 @@ def run_retrieval_eval():
         expected_rb = inc.get("expected_runbook")
         query_text = f"{inc['alert_name']}\n{inc['logs']}"
 
-        results = retriever.search(query_text, top_k=1)
-        top_rb, score = results[0] if results else (None, 0.0)
-        retrieved_name = top_rb["filename"] if top_rb else "None"
+        # Retrieve best match without minimum filter to inspect raw similarity
+        raw_results = retriever.search(query_text, top_k=1, min_score=0.0)
+        raw_top, raw_score = raw_results[0] if raw_results else (None, 0.0)
+        
+        # In production RAG, if similarity is below threshold, return NO MATCH
+        is_confident = (raw_score >= CONFIDENCE_THRESHOLD)
+        retrieved_name = raw_top["filename"] if (raw_top and is_confident) else "[No Match]"
 
         if expected_rb is not None:
             actionable_total += 1
-            if retrieved_name == expected_rb and score >= CONFIDENCE_THRESHOLD:
+            if retrieved_name == expected_rb:
                 actionable_passed += 1
                 status = "PASS"
             else:
                 status = "FAIL"
-            print(f"{inc_id:<9} | {expected_rb:<29} | {retrieved_name:<29} | {score:<6.3f} | [{status}]")
+            print(f"{inc_id:<9} | {expected_rb:<29} | {retrieved_name:<29} | {raw_score:<6.3f} | [{status}]")
         else:
             noise_total += 1
-            # Unactionable alerts (healthy blip or prompt injection) should not match with high score
-            if score < CONFIDENCE_THRESHOLD or "healthy" in inc.get("expected_cause", "").lower():
+            # For false alarms / injections, passing means correctly suppressing any runbook match
+            if not is_confident or retrieved_name == "[No Match]":
                 noise_rejected += 1
                 status = "PASS"
             else:
                 status = "WARN"
-            print(f"{inc_id:<9} | {'[None Expected]':<29} | {retrieved_name:<29} | {score:<6.3f} | [{status}]")
+            print(f"{inc_id:<9} | {'[None Expected]':<29} | {retrieved_name:<29} | {raw_score:<6.3f} | [{status}]")
 
     print("-" * len(header))
     actionable_acc = (actionable_passed / actionable_total) * 100 if actionable_total else 0

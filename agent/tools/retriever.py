@@ -72,8 +72,8 @@ class RunbookRetriever:
             return 0.0
         return dot_product / (norm_a * norm_b)
 
-    def search(self, query: str, top_k: int = 1) -> List[Tuple[Dict[str, Any], float]]:
-        """Finds the most relevant runbooks for a given query (incident log/alert)."""
+    def search(self, query: str, top_k: int = 1, min_score: float = 0.5) -> List[Tuple[Dict[str, Any], float]]:
+        """Finds the most relevant runbooks for a given query, filters out anything below min_score."""
         if not self.indexed_runbooks:
             self.index_runbooks()
 
@@ -82,7 +82,8 @@ class RunbookRetriever:
 
         for rb in self.indexed_runbooks:
             score = self.cosine_similarity(query_embedding, rb["embedding"])
-            scored_runbooks.append((rb, score))
+            if score >= min_score:
+                scored_runbooks.append((rb, score))
 
         # Sort descending by similarity score
         scored_runbooks.sort(key=lambda x: x[1], reverse=True)
