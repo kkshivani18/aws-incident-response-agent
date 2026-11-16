@@ -29,5 +29,7 @@ __pycache__/
 
 # env vars
 .env
-
 log.txt
+
+# Embedding caches
+.embeddings_cache.json
